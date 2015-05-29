@@ -12,16 +12,50 @@ bool parallel_pathtrace = true;
 image3f pathtrace(Scene* scene, bool multithread);
 void pathtrace(Scene* scene, image3f* image, RngImage* rngs, int offset_row, int skip_row, bool verbose);
 
-
-
 // lookup texture value
 vec3f lookup_scaled_texture(vec3f value, image3f* texture, vec2f uv, bool tile = false) {
     if(not texture) return value;
-    
-    // for now, simply clamp texture coords
-    auto u = clamp(uv.x, 0.0f, 1.0f);
-    auto v = clamp(uv.y, 0.0f, 1.0f);
-    return value * texture->at(u*(texture->width()-1), v*(texture->height()-1));
+    auto u = uv.x;
+    auto v = uv.y;
+
+    int i = int(u*texture->width());
+    int j = int(v*texture->height());
+
+    int s = u * texture->width() - i;
+    int t = v* texture->height() - j;
+
+    int i_prime = i+1;
+    int j_prime = j+1;
+
+    if(tile){
+        i=i%texture->width();
+        if(i<0){
+            i = i + texture->width();
+        }
+
+        i_prime=i_prime%texture->width();
+        if(i_prime<0){
+            i_prime = i_prime + texture->width();
+        }
+
+        j=j%texture->height();
+        if(j<0){
+            j = j + texture->height();
+        }
+
+        j_prime=j_prime%texture->height();
+        if(j<0){
+            j = j + texture->height();
+        }
+    }
+    else{
+        i = clamp(i, 0, texture->width()-1);
+        i_prime = clamp(i_prime, 0, texture->width()-1);
+        j = clamp(j, 0, texture->height()-1);
+        j_prime = clamp(j_prime, 0, texture->height()-1);
+    }
+
+    return value * texture->at(i,j)*(1-s)*(1-t) + texture->at(i,j_prime)*(1-s)*t + texture->at(i_prime,j)*s*(1-t) + texture->at(i_prime,j_prime)*s*t;
 }
 
 // compute the brdf
@@ -37,8 +71,12 @@ vec3f eval_brdf(vec3f kd, vec3f ks, float n, vec3f v, vec3f l, vec3f norm, bool 
 
 // evaluate the environment map
 vec3f eval_env(vec3f ke, image3f* ke_txt, vec3f dir) {
-    //  return ke; // <- placeholder
-    return lookup_scaled_texture(ke, ke_txt, vec2f(u,v),true);
+
+    float u = atan2(dir.x, dir.z)/(2.0f*pif);
+
+    float v = 1.0f - acos(dir.y)/pif;
+
+    return lookup_scaled_texture(ke, ke_txt, vec2f(u,v), true);
 }
 
 // compute the color corresponing to a ray by pathtrace
@@ -47,6 +85,7 @@ vec3f pathtrace_ray(Scene* scene, ray3f ray, Rng* rng, int depth) {
     auto intersection = intersect(scene,ray);
     
     // if not hit, return background (looking up the texture by converting the ray direction to latlong around y)
+   // if((not (intersection.hit))|| (depth==scene->path_max_depth && depth >0)) {
     if(not intersection.hit) {
         return eval_env(scene->background, scene->background_txt, ray.d);
     }
@@ -90,7 +129,7 @@ vec3f pathtrace_ray(Scene* scene, ray3f ray, Rng* rng, int depth) {
             c += shade;
         }
     }
-    
+
     // foreach surface
     for(Surface * s: scene->surfaces){
 
@@ -112,7 +151,7 @@ vec3f pathtrace_ray(Scene* scene, ray3f ray, Rng* rng, int depth) {
 
         // check if quad
         if(s->isquad){
-           light_pos = s->frame.o + ((0.5-r_num.x)*2.0f*s->radius*s->frame.x)+((0.5-r_num.y)*2.0f*s->radius*s->frame.y);
+           light_pos = s->frame.o + (r_num.x-0.5f)*2.0f*s->radius*s->frame.x + (r_num.y-0.5f)*2.0f*s->radius*s->frame.y;
 
            light_norm = normalize(s->frame.z);
 
@@ -169,7 +208,10 @@ vec3f pathtrace_ray(Scene* scene, ray3f ray, Rng* rng, int depth) {
         float pdf = samp_brdf.second;
 
         // compute the material response (brdf*cos)
-         vec3f material_repsonse = max(dot(norm, dir),0.0f)*eval_brdf(kd, ks, n, v, dir, norm, mf);
+        vec3f env = eval_env(intersection.mat->ke,intersection.mat->ke_txt, dir);
+        //printf("%f %f %f\n", env.x, env.y, env.z);
+        vec3f material_repsonse = max(dot(norm, dir),0.0f)*eval_env(intersection.mat->ke,intersection.mat->ke_txt, -dir);
+        //vec3f material_repsonse = max(dot(norm, dir),0.0f)*(eval_brdf(kd, ks, n, v, dir, norm, mf)+env);
 
         // todo: accumulate response scaled by brdf*cos/pdf
          vec3f res = material_repsonse/pdf;
