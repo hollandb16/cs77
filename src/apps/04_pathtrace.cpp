@@ -208,13 +208,13 @@ vec3f pathtrace_ray(Scene* scene, ray3f ray, Rng* rng, int depth) {
         float pdf = samp_brdf.second;
 
         // compute the material response (brdf*cos)
-        vec3f env = eval_env(intersection.mat->ke,intersection.mat->ke_txt, dir);
+        vec3f env = eval_env(scene->background, scene->background_txt, dir);
         //printf("%f %f %f\n", env.x, env.y, env.z);
-        vec3f material_repsonse = max(dot(norm, dir),0.0f)*eval_env(intersection.mat->ke,intersection.mat->ke_txt, -dir);
-        //vec3f material_repsonse = max(dot(norm, dir),0.0f)*(eval_brdf(kd, ks, n, v, dir, norm, mf)+env);
+        //vec3f material_repsonse = max(dot(norm, dir),0.0f)*eval_env(intersection.mat->ke,intersection.mat->ke_txt, dir);
+        vec3f material_repsonse = max(dot(norm, dir),0.0f)*(eval_brdf(kd, ks, n, v, dir, norm, mf));
 
         // todo: accumulate response scaled by brdf*cos/pdf
-         vec3f res = material_repsonse/pdf;
+         vec3f res = env*material_repsonse/pdf;
 
         // if material response not zero3f
          if(material_repsonse!=zero3f){
@@ -222,7 +222,7 @@ vec3f pathtrace_ray(Scene* scene, ray3f ray, Rng* rng, int depth) {
              // if shadows are enabled
              if(scene->path_shadows){
                  // perform a shadow check and accumulate
-                 if(!intersect_shadow(scene, ray3f::make_segment(pos, dir))){
+                 if(!intersect_shadow(scene, ray3f(pos, dir))){
                      c+=res;
                  }
              } else{
@@ -234,17 +234,17 @@ vec3f pathtrace_ray(Scene* scene, ray3f ray, Rng* rng, int depth) {
     
     // todo: sample the brdf for indirect illumination
     // if kd and ks are not zero3f and haven't reach max_depth
-    if(kd!=zero3f && ks!=zero3f && depth<scene->path_max_depth){
-        // pick direction and pdf
-        pair<vec3f, float> samp_brdf = sample_brdf(kd, ks, n, v, norm, rng->next_vec2f(), rng->next_float());
-        vec3f dir = samp_brdf.first;
-        float pdf = samp_brdf.second;
-        // compute the material response (brdf*cos)
-         vec3f material_repsonse = max(dot(norm, dir),0.0f)*eval_brdf(kd, ks, n, v, dir, norm, mf);
-         vec3f res = material_repsonse/pdf;
-        // accumulate recersively scaled by brdf*cos/pdf
-        c+= pathtrace_ray(scene, ray3f::make_segment(pos, dir), rng, depth+1)*res;
-    }
+//    if(kd!=zero3f && ks!=zero3f && depth<scene->path_max_depth){
+//        // pick direction and pdf
+//        pair<vec3f, float> samp_brdf = sample_brdf(kd, ks, n, v, norm, rng->next_vec2f(), rng->next_float());
+//        vec3f dir = samp_brdf.first;
+//        float pdf = samp_brdf.second;
+//        // compute the material response (brdf*cos)
+//         vec3f material_repsonse = max(dot(norm, dir),0.0f)*eval_brdf(kd, ks, n, v, dir, norm, mf);
+//         vec3f res = material_repsonse/pdf;
+//        // accumulate recersively scaled by brdf*cos/pdf
+//        c+= pathtrace_ray(scene, ray3f::make_segment(pos, dir), rng, depth+1)*res;
+//    }
 
     // if the material has reflections
     if(not (intersection.mat->kr == zero3f)) {
