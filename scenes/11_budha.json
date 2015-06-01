@@ -1,0 +1,40 @@
+{
+    "lookat_camera": { "from": [0,0.5,3] },
+    "meshes": [
+      {
+          "frame": { "o": [0,-0.5,-1], "x":[1,0,0], "y":[0,0,-1], "z":[0,1,0] },
+          "pos": [ 2,2,0, -2,2,0, -2,-2,0, 2,-2,0 ],
+          "norm": [ 0,0,1, 0,0,1, 0,0,1, 0,0,1 ],
+          "texcoord": [ 8,8, 0,8, 0,0, 8,0 ],
+          "quad": [ 0,1,2,3 ],
+          "material": { "kd": [1,1,1], "ks": [0,0,0], "kr": [0.3, 0.3, 0.3], "n": 100,
+              "kd_txt": "models/glass.png" }
+      },
+        {
+            "json_mesh": "models/budha.json",
+            "frame": { "o": [0,-1,-1] },
+            "material": { "kd": [0.85,0.65,0.12], "ks": [0.85,0.65,0.12], "n": 100 }
+        }
+    ],
+    "surfaces": [
+
+        {
+            "frame": { "o": [0,-1,0], "x": [1,0,0], "y": [0,0,-1], "z": [0,1,0] },
+            "radius":  10, "isquad": true,
+            "material": { "kd": [1,1,1], "ks": [0,0,0], "n": 100 }
+        },
+        {
+            "frame": { "from": [-4,10,5] },
+            "radius": 2.5, "isquad": true,
+            "material": { "ke": [10,10,10], "kd": [0,0,0], "ks": [0,0,0], "n": 100 }
+        }
+    ],
+    "lights": [
+        { "frame": { "o": [4,12,5] }, "intensity": [60,60,60] }
+    ],
+    "background": [0,0,0],
+    "image_samples": 15,
+    "image_width": 1024,
+    "image_height": 1024,
+    "path_max_depth": 0
+}

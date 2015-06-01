@@ -2,6 +2,7 @@
 #include "intersect.h"
 #include "montecarlo.h"
 #include "animation.h"
+#include "tesselation.h"
 
 #include <thread>
 using std::thread;
@@ -48,26 +49,6 @@ vec3f lookup_scaled_texture(vec3f value, image3f* texture, vec2f uv, bool tile =
                     texture->at(i,j_prime)*(1-s)*t +
                     texture->at(i_prime,j)*s*(1-t) +
                     texture->at(i_prime,j_prime)*s*t);
-//    auto size = vec2i(texture->width(), texture->height());
-//            auto ij = vec2i(uv.x * size.x, uv.y * size.y);
-//            auto st = uv * vec2f(size.x, size.y) - vec2f(ij.x, ij.y);
-//            auto iijj = ij + one2i;
-//            if (tile) { //Texture tiling
-//                ij.x %= size.x; if (ij.x < 0) ij.x += size.x;
-//                ij.y %= size.y; if (ij.y < 0) ij.y += size.y;
-//                iijj.x %= size.x; if (iijj.x < 0) iijj.x += size.x;
-//                iijj.y %= size.y; if (iijj.y < 0) iijj.y += size.y;
-//            } else {
-//                ij = clamp(ij, zero2i, size-one2i);
-//                iijj = clamp(iijj, zero2i, size-one2i);
-//            }
-//            //texture filtering
-
-//            return value*(texture->at(ij.x, ij.y)*(1-st.x)*(1-st.y) +
-//                          texture->at(ij.x, iijj.y)*(1-st.x)*st.y+
-//                          texture->at(iijj.x, ij.y)*st.x*(1-st.y)+
-//                          texture->at(iijj.x, iijj.y)*st.x*st.y);
-
 }
 
 // compute the brdf
@@ -108,9 +89,9 @@ vec3f pathtrace_ray(Scene* scene, ray3f ray, Rng* rng, int depth) {
     auto v = -ray.d;
     
     // compute material values by looking up textures
-    auto ke = lookup_scaled_texture(intersection.mat->ke, intersection.mat->ke_txt, intersection.texcoord);
-    auto kd = lookup_scaled_texture(intersection.mat->kd, intersection.mat->kd_txt, intersection.texcoord);
-    auto ks = lookup_scaled_texture(intersection.mat->ks, intersection.mat->ks_txt, intersection.texcoord);
+    auto ke = lookup_scaled_texture(intersection.mat->ke, intersection.mat->ke_txt, intersection.texcoord, true);
+    auto kd = lookup_scaled_texture(intersection.mat->kd, intersection.mat->kd_txt, intersection.texcoord, true);
+    auto ks = lookup_scaled_texture(intersection.mat->ks, intersection.mat->ks_txt, intersection.texcoord, true);
     auto n = intersection.mat->n;
     auto mf = intersection.mat->microfacet;
     
@@ -261,10 +242,32 @@ vec3f pathtrace_ray(Scene* scene, ray3f ray, Rng* rng, int depth) {
         c+= pathtrace_ray(scene, ray3f(pos, dir), rng, depth+1)*res;
     }
 
-    // if the material has reflections
+//    // if the material has reflections
+//    if(not (intersection.mat->kr == zero3f)) {
+//        // create the reflection ray
+//        auto rr = ray3f(intersection.pos,reflect(ray.d,intersection.norm));
+//        // accumulate the reflected light (recursive call) scaled by the material reflection
+//        c += intersection.mat->kr * pathtrace_ray(scene,rr,rng,depth+1);
+//    }
+
     if(not (intersection.mat->kr == zero3f)) {
         // create the reflection ray
         auto rr = ray3f(intersection.pos,reflect(ray.d,intersection.norm));
+        bool blur = true;
+               if(blur){
+                   //auto random = rng->next_vec2f();
+                   auto blurSize = .5;
+                   int N = 3; //samples
+                   auto rri = rr;
+                   rri.d += blurSize * (vec3f(.5,.5,.5) - rng->next_vec3f());
+                   //auto rri = rr+(.5-random.x)*blurSize*u+(.5-random.y)*blurSize*v;
+                   //rri = normalize(rri);
+                   auto blurSum = vec3f();
+                   for(int i=0; i<N; i++){
+                       blurSum += pathtrace_ray(scene, rri, rng, depth+1);
+                   }
+                   c += (intersection.mat->kr/N) * blurSum;
+               }
         // accumulate the reflected light (recursive call) scaled by the material reflection
         c += intersection.mat->kr * pathtrace_ray(scene,rr,rng,depth+1);
     }
@@ -306,6 +309,18 @@ int main(int argc, char** argv) {
     // NOTE: acceleration structure does not support animations
     message("reseting animation...\n");
     animate_reset(scene);
+
+    for (Mesh* m: scene->meshes) {
+            vector<vec3f> poss = vector<vec3f>(m->pos.size(), zero3f);
+            int i = 0;
+            for (vec3f pos : m->pos) {
+                poss[i] = pos * 10;
+                i++;
+            }
+            m->pos = poss;
+
+            facet_normals(m);
+        }
     
     message("accelerating...\n");
     accelerate(scene);
