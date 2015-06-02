@@ -9,6 +9,9 @@ using std::thread;
 
 // modify the following line to disable/enable parallel execution of the pathtracer
 bool parallel_pathtrace = true;
+bool blur = false;
+float blurSize = .1; //higher is more diffuse
+float russian_threshold = 0; //Set to zero to ignore russian roulette
 
 image3f pathtrace(Scene* scene, bool multithread);
 void pathtrace(Scene* scene, image3f* image, RngImage* rngs, int offset_row, int skip_row, bool verbose);
@@ -57,8 +60,24 @@ vec3f eval_brdf(vec3f kd, vec3f ks, float n, vec3f v, vec3f l, vec3f norm, bool 
         auto h = normalize(v+l);
         return kd/pif + ks*(n+8)/(8*pif) * pow(max(0.0f,dot(norm,h)),n);
     } else {
-        put_your_code_here("Implement microfacet brdf");
-        return one3f; // <- placeholder
+        //put_your_code_here("Implement microfacet brdf");
+        auto h = normalize(v+l);
+
+        auto d = ((n+2)/(2.0*pif)) * pow(max(0.0f,dot(norm,h)), n);
+
+        auto f = ks + (one3f - ks)*pow((1-dot(h, norm)), 5);
+
+        auto numer1 = 2*dot(h,norm)*dot(v,norm);
+        auto numer2 = 2*dot(h,norm)*dot(l,norm);
+        auto g = min(numer1/dot(v,h), numer2/dot(l,h));
+
+        g = min(1.0, g);
+
+        auto p = (d*g*f)/(4*dot(l,norm)*dot(v,norm));
+
+       return p;
+       //return one3f;  // <- placeholder
+
     }
 }
 
@@ -74,6 +93,10 @@ vec3f eval_env(vec3f ke, image3f* ke_txt, vec3f dir) {
 
 // compute the color corresponing to a ray by pathtrace
 vec3f pathtrace_ray(Scene* scene, ray3f ray, Rng* rng, int depth) {
+    
+    //Russian Roulette
+    if(rng->next_float() < russian_threshold) return zero3f;
+
     // get scene intersection
     auto intersection = intersect(scene,ray);
     
@@ -241,35 +264,28 @@ vec3f pathtrace_ray(Scene* scene, ray3f ray, Rng* rng, int depth) {
         c+= pathtrace_ray(scene, ray3f(pos, dir), rng, depth+1)*res;
     }
 
-//    // if the material has reflections
-//    if(not (intersection.mat->kr == zero3f)) {
-//        // create the reflection ray
-//        auto rr = ray3f(intersection.pos,reflect(ray.d,intersection.norm));
-//        // accumulate the reflected light (recursive call) scaled by the material reflection
-//        c += intersection.mat->kr * pathtrace_ray(scene,rr,rng,depth+1);
-//    }
-
+    // if the material has reflections
     if(not (intersection.mat->kr == zero3f)) {
         // create the reflection ray
         auto rr = ray3f(intersection.pos,reflect(ray.d,intersection.norm));
-        bool blur = false;
-               if(blur){
-                   //auto random = rng->next_vec2f();
-                   auto blurSize = .5;
-                   int N = 3; //samples
-                   auto rri = rr;
-                   rri.d += blurSize * (vec3f(.5,.5,.5) - rng->next_vec3f());
-                   //auto rri = rr+(.5-random.x)*blurSize*u+(.5-random.y)*blurSize*v;
-                   //rri = normalize(rri);
-                   auto blurSum = vec3f();
-                   for(int i=0; i<N; i++){
-                       blurSum += pathtrace_ray(scene, rri, rng, depth+1);
-                   }
-                   c += (intersection.mat->kr/N) * blurSum;
-               }
+        if(blur){
+           //auto random = rng->next_vec2f();
 
-        // accumulate the reflected light (recursive call) scaled by the material reflection
-        c += intersection.mat->kr * pathtrace_ray(scene,rr,rng,depth+1);
+           int N = 3; //samples
+           auto rri = rr;
+           rri.d += blurSize * (vec3f(.5,.5,.5) - rng->next_vec3f());
+           //auto rri = rr+(.5-random.x)*blurSize*u+(.5-random.y)*blurSize*v;
+           //rri = normalize(rri);
+           auto blurSum = vec3f();
+           for(int i=0; i<N; i++){
+               blurSum += pathtrace_ray(scene, rri, rng, depth+1);
+           }
+           c += (intersection.mat->kr/N) * blurSum;
+       }
+       else{
+            // accumulate the reflected light (recursive call) scaled by the material reflection
+            c += intersection.mat->kr * pathtrace_ray(scene,rr,rng,depth+1);
+        }
     }
     
     // return the accumulated color
@@ -369,6 +385,8 @@ void pathtrace(Scene* scene, image3f* image, RngImage* rngs, int offset_row, int
             }
             // scale by the number of samples
             image->at(i,j) /= (scene->image_samples*scene->image_samples);
+            //Correct of Russian Roulette light loss
+            image->at(i,j) *= 1/(1-russian_threshold);
         }
     }
     if(verbose) message("\r  rendering done        \n");
