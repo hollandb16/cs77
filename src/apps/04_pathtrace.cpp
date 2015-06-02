@@ -78,7 +78,6 @@ vec3f pathtrace_ray(Scene* scene, ray3f ray, Rng* rng, int depth) {
     auto intersection = intersect(scene,ray);
     
     // if not hit, return background (looking up the texture by converting the ray direction to latlong around y)
-   // if((not (intersection.hit))|| (depth==scene->path_max_depth && depth >0)) {
     if(not intersection.hit) {
         return eval_env(scene->background, scene->background_txt, ray.d);
     }
@@ -253,7 +252,7 @@ vec3f pathtrace_ray(Scene* scene, ray3f ray, Rng* rng, int depth) {
     if(not (intersection.mat->kr == zero3f)) {
         // create the reflection ray
         auto rr = ray3f(intersection.pos,reflect(ray.d,intersection.norm));
-        bool blur = true;
+        bool blur = false;
                if(blur){
                    //auto random = rng->next_vec2f();
                    auto blurSize = .5;
@@ -268,6 +267,7 @@ vec3f pathtrace_ray(Scene* scene, ray3f ray, Rng* rng, int depth) {
                    }
                    c += (intersection.mat->kr/N) * blurSum;
                }
+
         // accumulate the reflected light (recursive call) scaled by the material reflection
         c += intersection.mat->kr * pathtrace_ray(scene,rr,rng,depth+1);
     }
@@ -310,17 +310,17 @@ int main(int argc, char** argv) {
     message("reseting animation...\n");
     animate_reset(scene);
 
-    for (Mesh* m: scene->meshes) {
-            vector<vec3f> poss = vector<vec3f>(m->pos.size(), zero3f);
-            int i = 0;
-            for (vec3f pos : m->pos) {
-                poss[i] = pos * 10;
-                i++;
-            }
-            m->pos = poss;
+//    for (Mesh* m: scene->meshes) {
+//            vector<vec3f> poss = vector<vec3f>(m->pos.size(), zero3f);
+//            int i = 0;
+//            for (vec3f pos : m->pos) {
+//                poss[i] = pos * 10;
+//                i++;
+//            }
+//            m->pos = poss;
 
-            facet_normals(m);
-        }
+//            facet_normals(m);
+//        }
     
     message("accelerating...\n");
     accelerate(scene);
